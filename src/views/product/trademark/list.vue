@@ -1,11 +1,9 @@
 <template>
   <div>
     <!-- 引入添加按钮 -->
-    <el-button type="primary" icon="el-icon-plus" @click="dialogVisible = true"
-      >添加</el-button
-    >
+    <el-button type="primary" icon="el-icon-plus" @click="add">添加</el-button>
     <!-- 引入表格 -->
-    <el-table :data="tradeMark" border style="width: 100%; margin: 20px 0">
+    <el-table :data="tradeMark" v-loading="loading" border style="width: 100%; margin: 20px 0">
       <el-table-column type="index" label="序号" width="80" align="center">
       </el-table-column>
       <el-table-column prop="tmName" label="品牌名称"> </el-table-column>
@@ -15,8 +13,15 @@
         </template>
       </el-table-column>
       <el-table-column label="操作">
-        <el-button type="warning" icon="el-icon-edit">修改</el-button>
-        <el-button type="danger" icon="el-icon-delete">删除</el-button>
+        <template v-slot="{ row }">
+          <el-button
+            type="warning"
+            icon="el-icon-edit"
+            @click="updateTradeMark(row)"
+            >修改</el-button
+          >
+          <el-button type="danger" icon="el-icon-delete">删除</el-button>
+        </template>
       </el-table-column>
     </el-table>
     <!-- 分页器 -->
@@ -84,6 +89,7 @@ export default {
         tmName: "",
         logoUrl: "",
       },
+      loading:false,
       rules: {
         tmName: [
           { required: true, message: "请输入品牌名称", trigger: "blur" },
@@ -95,10 +101,40 @@ export default {
     };
   },
   methods: {
-    submitForm(addTradeMark) {
-      this.$refs[addTradeMark].validate(async (valid) => {
+    add() {
+      this.$refs.addTradeMark && this.$refs.addTradeMark.clearValidate();
+      this.dialogVisible = true;
+      this.addTradeMark = {
+        tmName: "",
+        logoUrl: "",
+      };
+    },
+    updateTradeMark(row) {
+      this.$refs.addTradeMark && this.$refs.addTradeMark.clearValidate();
+      this.dialogVisible = true;
+      this.addTradeMark = { ...row };
+    },
+    submitForm(from) {
+      this.$refs[from].validate(async (valid) => {
+        const { addTradeMark } = this;
+        const isUpdate = !!addTradeMark.id;
+        if (isUpdate) {
+          const tm = this.tradeMark.find((tm) => tm.id === addTradeMark.id);
+          if (
+            tm.tmName === addTradeMark.tmName &&
+            tm.logoUrl === addTradeMark.logoUrl
+          ) {
+            this.$message.warning("不能提交与之前一样的数据");
+            return;
+          }
+        }
         if (valid) {
-          const result = await this.$API.trademark.addTrademark(this.addTradeMark);
+          let result;
+          if (isUpdate) {
+            result = await this.$API.trademark.updateTrademark(addTradeMark);
+          } else {
+            result = await this.$API.trademark.addTrademark(addTradeMark);
+          }
           if (result.code === 200) {
             this.$message.success("添加品牌数据成功");
             this.dialogVisible = false;
@@ -133,6 +169,7 @@ export default {
     },
 
     async getPageList(page = 1, limit = 3) {
+      this.loading = true
       const result = await this.$API.trademark.getPageList(page, limit);
       if (result.code === 200) {
         this.$message.success("获取品牌分页列表成功");
@@ -143,6 +180,7 @@ export default {
       } else {
         this.$message.success("获取品牌分页列表失败");
       }
+      this.loading = false
     },
   },
   mounted() {
