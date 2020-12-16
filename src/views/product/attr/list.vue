@@ -1,54 +1,15 @@
 <template>
   <div>
-    <el-card>
-      <el-form inline :model="category">
-        <el-form-item label="一级分类">
-          <el-select
-            v-model="category.category1Id"
-            placeholder="请选择"
-            @change="getCategory2List"
-          >
-            <el-option
-              v-for="category1 in category1List"
-              :key="category1.id"
-              :label="category1.name"
-              :value="category1.id"
-            ></el-option>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="二级分类">
-          <el-select
-            v-model="category.category2Id"
-            placeholder="请选择"
-            @change="getCategory3List"
-          >
-            <el-option
-              v-for="category2 in category2List"
-              :key="category2.id"
-              :label="category2.name"
-              :value="category2.id"
-            ></el-option>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="三级分类">
-          <el-select
-            v-model="category.category3Id"
-            placeholder="请选择"
-            @change="getattrList"
-          >
-            <el-option
-              v-for="category3 in category3List"
-              :key="category3.id"
-              :label="category3.name"
-              :value="category3.id"
-            ></el-option>
-          </el-select>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <Category :disabled="!isShowList" />
 
-    <el-card style="margin-top: 20px">
-      <el-button type="primary" icon="el-icon-plus">添加属性</el-button>
+    <el-card v-show="isShowList" style="margin-top: 20px">
+      <el-button
+        type="primary"
+        icon="el-icon-plus"
+        :disabled="!category.category3Id"
+        @click="add"
+        >添加属性</el-button
+      >
 
       <el-table :data="attrList" border style="width: 100%; margin: 20px 0">
         <el-table-column type="index" label="序号" width="80" align="center">
@@ -67,55 +28,163 @@
           </template></el-table-column
         >
         <el-table-column label="操作" width="150">
-          <template>
-            <el-button type="primary" icon="el-icon-edit" size="mini"></el-button>
-            <el-button type="danger" icon="el-icon-delete" size="mini"></el-button>
+          <template v-slot="{ row }">
+            <el-button
+              type="primary"
+              icon="el-icon-edit"
+              size="mini"
+              @click="update(row)"
+            ></el-button>
+            <el-button
+              type="danger"
+              icon="el-icon-delete"
+              size="mini"
+            ></el-button>
           </template>
         </el-table-column>
       </el-table>
+    </el-card>
+
+    <el-card v-show="!isShowList" style="margin-top: 20px">
+      <el-form :model="attr" inline>
+        <el-form-item label="属性名" prop="attrName">
+          <el-input v-model="attr.attrName"></el-input>
+        </el-form-item>
+      </el-form>
+
+      <el-button type="primary" icon="el-icon-plus" @click="addAttrValue"
+        >添加属性值</el-button
+      >
+
+      <el-table
+        :data="attr.attrValueList"
+        border
+        style="width: 100%; margin: 20px 0"
+      >
+        <el-table-column type="index" label="序号" width="80" align="center">
+        </el-table-column>
+        <el-table-column label="属性值名称">
+          <template v-slot="{ row, $index }">
+            <!--
+              事件修饰符：
+                .native
+                专门给组件绑定事件使用的
+                会给组件中的第一个标签绑定相应的原生DOM事件
+             -->
+            <el-input
+              v-if="row.edit"
+              v-model="row.valueName"
+              @blur="editCompleted(row, $index)"
+              @keyup.enter.native="editCompleted(row, $index)"
+              autofocus
+              ref="input"
+              size="mini"
+            ></el-input>
+            <!-- 直接给对象添加新属性不是响应式数据, 通过this.$set添加的属性才是响应式 -->
+            <span
+              v-else
+              @click="edit(row)"
+              style="display: block; width: 100%"
+              >{{ row.valueName }}</span
+            >
+          </template>
+        </el-table-column>
+        <el-table-column label="操作">
+          <template v-slot="{ row, $index }">
+            <!-- 文档有问题：onConfirm -->
+            <el-popconfirm
+              @onConfirm="delAttrValue($index)"
+              :title="`确定删除 ${row.valueName} 吗？`"
+              ><el-button
+                type="danger"
+                icon="el-icon-delete"
+                size="mini"
+                slot="reference"
+              ></el-button
+            ></el-popconfirm>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <el-button type="primary" @click="save">保存</el-button>
+      <el-button @click="isShowList = true">取消</el-button>
     </el-card>
   </div>
 </template>
 
 <script>
+import Category from "@/components/Category";
 export default {
   name: "AttrList",
   data() {
     return {
+      attrList: [],
+      isShowList: true,
+      attr: {
+        attrName: "",
+        attrValueList: [],
+      },
       category: {
+        // 代表三个分类id数据
         category1Id: "",
         category2Id: "",
         category3Id: "",
       },
-      attrList: [],
-      category1List: [],
-      category2List: [],
-      category3List: [],
     };
   },
   methods: {
-    async getCategory2List(category1Id) {
-      const result = await this.$API.attr.getCategory2(category1Id);
+    clearList() {
+      // 清空数据
+      this.attrList = [];
+      // 禁用按钮
+      this.category.category3Id = "";
+    },
+    // 显示添加属性列表
+    add() {
+      this.isShowList = false;
+      this.attr.attrName = "";
+      this.attr.attrValueList = [];
+    },
+    editCompleted(row, index) {
+      if (!row.valueName) {
+        this.attr.attrValueList.splice(index, 1);
+        return;
+      }
+      row.edit = false;
+    },
+    async save() {
+      const result = await this.$API.attr.saveAttrInfo(this.attr);
       if (result.code === 200) {
-        this.category2List = result.data;
+        this.$message.success("更新属性成功~");
+        this.isShowList = true;
+        this.getattrList(this.category);
       } else {
         this.$message.error(result.message);
       }
     },
-    async getCategory3List(category2Id) {
-      const result = await this.$API.attr.getCategory3(category2Id);
-      if (result.code === 200) {
-        this.category3List = result.data;
-      } else {
-        this.$message.error(result.message);
-      }
+    delAttrValue(index) {
+      console.log(index);
+      this.attr.attrValueList.splice(index, 1);
     },
-    async getattrList(category3Id) {
-      const category = {
-        ...this.category,
-        category3Id,
-      };
-      console.log(category);
+    addAttrValue() {
+      this.attr.attrValueList.push({ edit: true });
+      this.$nextTick(() => {
+        this.$refs.input.focus();
+      });
+    },
+    edit(row) {
+      this.$set(row, "edit", true);
+      this.$nextTick(() => {
+        this.$refs.input.focus();
+      });
+    },
+    update(attr) {
+      this.attr = JSON.parse(JSON.stringify(attr));
+
+      this.isShowList = false;
+    },
+    async getattrList(category) {
+      this.category = category;
       const result = await this.$API.attr.getAttrInfoList(category);
       if (result.code === 200) {
         this.attrList = result.data;
@@ -124,13 +193,17 @@ export default {
       }
     },
   },
-  async mounted() {
-    const result = await this.$API.attr.getCategory1();
-    if (result.code === 200) {
-      this.category1List = result.data;
-    } else {
-      this.$message.error(result.message);
-    }
+  mounted() {
+    this.$bus.$on("change", this.getattrList);
+    this.$bus.$on("clearList", this.clearList);
+  },
+  beforeDestroy() {
+    // 通常情况下：清除绑定的全局事件
+    this.$bus.$off("change", this.getattrList);
+    this.$bus.$off("clearList", this.clearList);
+  },
+  components: {
+    Category,
   },
 };
 </script>
